@@ -12,10 +12,10 @@ import (
 
 func userResource() *schema.Resource {
 	return &schema.Resource{
-		Create: userResourceServerCreate,
-		Read:   userResourceServerRead,
-		Update: userResourceServerUpdate,
-		Delete: userResourceServerDelete,
+		Create: userResourceCreate,
+		Read:   userResourceRead,
+		Update: userResourceUpdate,
+		Delete: userResourceDelete,
 
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -44,7 +44,7 @@ func userResource() *schema.Resource {
 	}
 }
 
-func userResourceServerCreate(d *schema.ResourceData, m interface{}) error {
+func userResourceCreate(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
 	name := d.Get("name").(string)
 	uid := d.Get("uid").(int)
@@ -64,7 +64,7 @@ func userResourceServerCreate(d *schema.ResourceData, m interface{}) error {
 	d.Set("uid", uid)
 
 	d.SetId(name)
-	return userResourceServerRead(d, m)
+	return userResourceRead(d, m)
 }
 
 func createUser(client *Client, name string, uid int, gid int, system bool) error {
@@ -146,15 +146,15 @@ func getUserId(client *Client, name string) (int, error) {
 	return uid, nil
 }
 
-func userResourceServerRead(d *schema.ResourceData, m interface{}) error {
+func userResourceRead(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-func userResourceServerUpdate(d *schema.ResourceData, m interface{}) error {
+func userResourceUpdate(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-func userResourceServerDelete(d *schema.ResourceData, m interface{}) error {
+func userResourceDelete(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
 	name := d.Id()
 

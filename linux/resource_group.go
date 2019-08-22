@@ -12,10 +12,10 @@ import (
 
 func groupResource() *schema.Resource {
 	return &schema.Resource{
-		Create: groupResourceServerCreate,
-		Read:   groupResourceServerRead,
-		Update: groupResourceServerUpdate,
-		Delete: groupResourceServerDelete,
+		Create: groupResourceCreate,
+		Read:   groupResourceRead,
+		Update: groupResourceUpdate,
+		Delete: groupResourceDelete,
 
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -38,7 +38,7 @@ func groupResource() *schema.Resource {
 	}
 }
 
-func groupResourceServerCreate(d *schema.ResourceData, m interface{}) error {
+func groupResourceCreate(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
 	name := d.Get("name").(string)
 	gid := d.Get("gid").(int)
@@ -57,7 +57,7 @@ func groupResourceServerCreate(d *schema.ResourceData, m interface{}) error {
 	d.Set("gid", gid)
 
 	d.SetId(name)
-	return groupResourceServerRead(d, m)
+	return groupResourceRead(d, m)
 }
 
 func createGroup(client *Client, name string, gid int, system bool) error {
@@ -136,15 +136,15 @@ func getGroupId(client *Client, name string) (int, error) {
 	return gid, nil
 }
 
-func groupResourceServerRead(d *schema.ResourceData, m interface{}) error {
+func groupResourceRead(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-func groupResourceServerUpdate(d *schema.ResourceData, m interface{}) error {
+func groupResourceUpdate(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-func groupResourceServerDelete(d *schema.ResourceData, m interface{}) error {
+func groupResourceDelete(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
 	name := d.Id()
 
