@@ -21,7 +21,6 @@ func TestProvider(t *testing.T) {
 	if err := testAccProvider.InternalValidate(); err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	testAccPreCheck(t)
 }
 
 func testAccPreCheck(t *testing.T) {
