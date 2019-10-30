@@ -17,10 +17,12 @@ type Config struct {
 	User       string
 	Password   string
 	PrivateKey string
+	UseSudo    bool
 }
 
 type Client struct {
 	connection *ssh.Client
+	useSudo    bool
 }
 
 func (c *Config) Client() (*Client, error) {
@@ -64,5 +66,8 @@ func (c *Config) Client() (*Client, error) {
 
 	log.Printf("SSH client configured")
 
-	return &Client{connection}, nil
+	return &Client{
+		connection: connection,
+		useSudo:    c.UseSudo,
+	}, nil
 }

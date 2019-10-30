@@ -2,12 +2,11 @@ package linux
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/pkg/errors"
 )
 
 func userResource() *schema.Resource {
@@ -21,7 +20,6 @@ func userResource() *schema.Resource {
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
-				ForceNew: true,
 			},
 			"uid": {
 				Type:     schema.TypeInt,
@@ -33,7 +31,6 @@ func userResource() *schema.Resource {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 			},
 			"system": &schema.Schema{
 				Type:     schema.TypeBool,
@@ -53,22 +50,22 @@ func userResourceCreate(d *schema.ResourceData, m interface{}) error {
 
 	err := createUser(client, name, uid, gid, system)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Couldn't create user")
 	}
 
 	uid, err = getUserId(client, name)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Couldn't get uid")
 	}
 
 	d.Set("uid", uid)
 
-	d.SetId(name)
+	d.SetId(fmt.Sprintf("%v", uid))
 	return userResourceRead(d, m)
 }
 
 func createUser(client *Client, name string, uid int, gid int, system bool) error {
-	command := "sudo /usr/sbin/useradd"
+	command := "/usr/sbin/useradd"
 
 	if uid > 0 {
 		command = fmt.Sprintf("%s --uid %d", command, uid)
@@ -80,66 +77,52 @@ func createUser(client *Client, name string, uid int, gid int, system bool) erro
 		command = fmt.Sprintf("%s --system", command)
 	}
 	command = fmt.Sprintf("%s %s", command, name)
-
-	session, err := client.connection.NewSession()
+	_, _, err := runCommand(client, true, command, "")
 	if err != nil {
-		return fmt.Errorf("Failed to create session: %s", err)
-	}
-
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("Unable to setup stderr for session: %v", err)
-	}
-
-	log.Printf("Running command %s", command)
-
-	err = session.Run(command)
-	if err != nil {
-		output, err2 := ioutil.ReadAll(stderr)
-		if err2 != nil {
-			log.Printf("Unable to read stderr for command: %v", err)
-		}
-		log.Printf("Stderr output: %s", string(output))
-
-		return fmt.Errorf("Error running command %s: %s", command, err)
+		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
 	return nil
 }
 
 func getUserId(client *Client, name string) (int, error) {
 	command := fmt.Sprintf("id --user %s", name)
-	session, err := client.connection.NewSession()
+	stdout, _, err := runCommand(client, false, command, "")
 	if err != nil {
-		return 0, fmt.Errorf("Failed to create session: %s", err)
+		return 0, errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
-
-	stderr, err := session.StderrPipe()
+	if stdout == "" {
+		return 0, fmt.Errorf("User not found with name %v", name)
+	}
+	uid, err := strconv.Atoi(strings.TrimSpace(stdout))
 	if err != nil {
-		return 0, fmt.Errorf("Unable to setup stderr for session: %v", err)
+		return 0, err
 	}
-	stdout, err := session.StdoutPipe()
+	return uid, nil
+}
+
+func getUserName(client *Client, uid int) (string, error) {
+	command := fmt.Sprintf("getent passwd %d", uid)
+	stdout, _, err := runCommand(client, false, command, "")
 	if err != nil {
-		return 0, fmt.Errorf("Unable to setup stdout for session: %v", err)
+		return "", errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
+	if stdout == "" {
+		return "", fmt.Errorf("User not found with id %v", uid)
+	}
+	name := strings.Split(stdout, ":")[0]
+	return name, nil
+}
 
-	log.Printf("Running command %s", command)
-
-	err = session.Run(command)
+func getGroupIdForUser(client *Client, name string) (int, error) {
+	command := fmt.Sprintf("getent passwd %s", name)
+	stdout, _, err := runCommand(client, false, command, "")
 	if err != nil {
-		output, err2 := ioutil.ReadAll(stderr)
-		if err2 != nil {
-			log.Printf("Unable to read stderr for command: %v", err)
-		}
-		log.Printf("Stderr output: %s", string(output))
-
-		return 0, fmt.Errorf("Error running command %s: %s", command, err)
+		return 0, errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
-
-	output, err := ioutil.ReadAll(stdout)
-	if err != nil {
-		return 0, fmt.Errorf("Unable to read stdout for command: %v", err)
+	if stdout == "" {
+		return 0, fmt.Errorf("Group not found for user %v", name)
 	}
-	uid, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	uid, err := strconv.Atoi(strings.TrimSpace(strings.Split(stdout, ":")[3]))
 	if err != nil {
 		return 0, err
 	}
@@ -147,40 +130,75 @@ func getUserId(client *Client, name string) (int, error) {
 }
 
 func userResourceRead(d *schema.ResourceData, m interface{}) error {
+	client := m.(*Client)
+	uid, err := strconv.Atoi(d.Id())
+	if err != nil {
+		return errors.Wrap(err, "ID stored is not int")
+	}
+	name, err := getUserName(client, uid)
+	if err != nil {
+		d.SetId("")
+		return nil
+	}
+	d.Set("name", name)
+	gid, err := getGroupIdForUser(client, name)
+	if err != nil {
+		return errors.Wrap(err, "Couldn't find group for user")
+	}
+	d.Set("gid", gid)
 	return nil
 }
 
 func userResourceUpdate(d *schema.ResourceData, m interface{}) error {
-	return nil
+	client := m.(*Client)
+	uid, err := strconv.Atoi(d.Id())
+	if err != nil {
+		return errors.Wrap(err, "ID stored is not int")
+	}
+	name := d.Get("name").(string)
+	gid := d.Get("gid").(int)
+	oldname, err := getUserName(client, uid)
+	if err != nil {
+		return errors.Wrap(err, "Failed to get user name")
+	}
+	oldgid, err := getGroupIdForUser(client, oldname)
+	if err != nil {
+		return errors.Wrap(err, "Failed to get user gid")
+	}
+
+	if oldname != name {
+		command := fmt.Sprintf("/usr/sbin/usermod %s -l %s", oldname, name)
+		_, _, err = runCommand(client, true, command, "")
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
+		}
+	}
+
+	if oldgid != gid {
+		command := fmt.Sprintf("/usr/sbin/usermod %s -g %d", name, gid)
+		_, _, err = runCommand(client, true, command, "")
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
+		}
+	}
+	return userResourceRead(d, m)
 }
 
 func userResourceDelete(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
-	name := d.Id()
-
-	command := fmt.Sprintf("sudo /usr/sbin/userdel %s", name)
-	session, err := client.connection.NewSession()
+	uid, err := strconv.Atoi(d.Id())
 	if err != nil {
-		return fmt.Errorf("Failed to create session: %s", err)
+		errors.Wrap(err, "ID stored is not int")
+	}
+	name, err := getUserName(client, uid)
+	if err != nil {
+		return errors.Wrap(err, "Failed to get user name")
 	}
 
-	stderr, err := session.StderrPipe()
+	command := fmt.Sprintf("/usr/sbin/userdel %s", name)
+	_, _, err = runCommand(client, true, command, "")
 	if err != nil {
-		return fmt.Errorf("Unable to setup stderr for session: %v", err)
+		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
-
-	log.Printf("Running command %s", command)
-
-	err = session.Run(command)
-	if err != nil {
-		output, err2 := ioutil.ReadAll(stderr)
-		if err2 != nil {
-			log.Printf("Unable to read stderr for command: %v", err)
-		}
-		log.Printf("Stderr output: %s", string(output))
-
-		return fmt.Errorf("Error running command %s: %s", command, err)
-	}
-
 	return nil
 }

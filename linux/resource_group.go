@@ -2,12 +2,12 @@ package linux
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/pkg/errors"
 )
 
 func groupResource() *schema.Resource {
@@ -18,10 +18,9 @@ func groupResource() *schema.Resource {
 		Delete: groupResourceDelete,
 
 		Schema: map[string]*schema.Schema{
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Required: true,
-				ForceNew: true,
 			},
 			"gid": {
 				Type:     schema.TypeInt,
@@ -29,7 +28,7 @@ func groupResource() *schema.Resource {
 				Computed: true,
 				ForceNew: true,
 			},
-			"system": &schema.Schema{
+			"system": {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Default:  false,
@@ -46,22 +45,22 @@ func groupResourceCreate(d *schema.ResourceData, m interface{}) error {
 
 	err := createGroup(client, name, gid, system)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Couldn't create group")
 	}
 
 	gid, err = getGroupId(client, name)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Couldn't get gid")
 	}
 
 	d.Set("gid", gid)
 
-	d.SetId(name)
+	d.SetId(fmt.Sprintf("%v", gid))
 	return groupResourceRead(d, m)
 }
 
 func createGroup(client *Client, name string, gid int, system bool) error {
-	command := "sudo /usr/sbin/groupadd"
+	command := "/usr/sbin/groupadd"
 
 	if gid > 0 {
 		command = fmt.Sprintf("%s --gid %d", command, gid)
@@ -70,107 +69,96 @@ func createGroup(client *Client, name string, gid int, system bool) error {
 		command = fmt.Sprintf("%s --system", command)
 	}
 	command = fmt.Sprintf("%s %s", command, name)
-
-	session, err := client.connection.NewSession()
+	_, _, err := runCommand(client, true, command, "")
 	if err != nil {
-		return fmt.Errorf("Failed to create session: %s", err)
-	}
-
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("Unable to setup stderr for session: %v", err)
-	}
-
-	log.Printf("Running command %s", command)
-
-	err = session.Run(command)
-	if err != nil {
-		output, err2 := ioutil.ReadAll(stderr)
-		if err2 != nil {
-			log.Printf("Unable to read stderr for command: %v", err)
-		}
-		log.Printf("Stderr output: %s", string(output))
-
-		return fmt.Errorf("Error running command %s: %s", command, err)
+		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
 	return nil
 }
 
 func getGroupId(client *Client, name string) (int, error) {
 	command := fmt.Sprintf("getent group %s", name)
-	session, err := client.connection.NewSession()
+	stdout, _, err := runCommand(client, false, command, "")
 	if err != nil {
-		return 0, fmt.Errorf("Failed to create session: %s", err)
+		return 0, errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
-
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return 0, fmt.Errorf("Unable to setup stderr for session: %v", err)
+	if stdout == "" {
+		return 0, fmt.Errorf("Group not found with name %v", name)
 	}
-	stdout, err := session.StdoutPipe()
-	if err != nil {
-		return 0, fmt.Errorf("Unable to setup stdout for session: %v", err)
-	}
-
-	log.Printf("Running command %s", command)
-
-	err = session.Run(command)
-	if err != nil {
-		output, err2 := ioutil.ReadAll(stderr)
-		if err2 != nil {
-			log.Printf("Unable to read stderr for command: %v", err)
-		}
-		log.Printf("Stderr output: %s", strings.TrimSpace(string(output)))
-
-		return 0, fmt.Errorf("Error running command %s: %s", command, err)
-	}
-
-	output, err := ioutil.ReadAll(stdout)
-	if err != nil {
-		return 0, fmt.Errorf("Unable to read stdout for command: %v", err)
-	}
-	gid, err := strconv.Atoi(strings.Split(string(output), ":")[2])
+	gid, err := strconv.Atoi(strings.Split(stdout, ":")[2])
 	if err != nil {
 		return 0, err
 	}
 	return gid, nil
 }
 
+func getGroupName(client *Client, gid int) (string, error) {
+	command := fmt.Sprintf("getent group %d", gid)
+	stdout, _, err := runCommand(client, false, command, "")
+	if err != nil {
+		return "", errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
+	}
+	if stdout == "" {
+		return "", fmt.Errorf("Group not found with id %v", gid)
+	}
+	name := strings.Split(stdout, ":")[0]
+	return name, nil
+}
+
 func groupResourceRead(d *schema.ResourceData, m interface{}) error {
+	client := m.(*Client)
+	gid, err := strconv.Atoi(d.Id())
+	if err != nil {
+		return errors.Wrap(err, "ID stored is not int")
+	}
+	name, err := getGroupName(client, gid)
+	if err != nil {
+		log.Printf("%v", err)
+		log.Printf("Error getting group name, will recreate it")
+		d.SetId("")
+		return nil
+	}
+	d.Set("name", name)
 	return nil
 }
 
 func groupResourceUpdate(d *schema.ResourceData, m interface{}) error {
-	return nil
+	client := m.(*Client)
+	gid, err := strconv.Atoi(d.Id())
+	if err != nil {
+		return errors.Wrap(err, "ID stored is not int")
+	}
+	name := d.Get("name").(string)
+	oldname, err := getGroupName(client, gid)
+	if err != nil {
+		return errors.Wrap(err, "Failed to get group name")
+	}
+
+	if oldname != name {
+		command := fmt.Sprintf("/usr/sbin/groupmod %s -n %s", oldname, name)
+		_, _, err = runCommand(client, true, command, "")
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
+		}
+	}
+	return groupResourceRead(d, m)
 }
 
 func groupResourceDelete(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
-	name := d.Id()
-
-	command := fmt.Sprintf("sudo /usr/sbin/groupdel %s", name)
-	session, err := client.connection.NewSession()
+	gid, err := strconv.Atoi(d.Id())
 	if err != nil {
-		return fmt.Errorf("Failed to create session: %s", err)
+		return errors.Wrap(err, "ID stored is not int")
+	}
+	name, err := getGroupName(client, gid)
+	if err != nil {
+		return errors.Wrap(err, "Failed to get group name")
 	}
 
-	stderr, err := session.StderrPipe()
+	command := fmt.Sprintf("/usr/sbin/groupdel %s", name)
+	_, _, err = runCommand(client, true, command, "")
 	if err != nil {
-		return fmt.Errorf("Unable to setup stderr for session: %v", err)
+		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
-
-	log.Printf("Running command %s", command)
-
-	err = session.Run(command)
-	if err != nil {
-		output, err2 := ioutil.ReadAll(stderr)
-		if err2 != nil {
-			log.Printf("Unable to read stderr for command: %v", err)
-		}
-		log.Printf("Stderr output: %s", string(output))
-
-		return fmt.Errorf("Error running command %s: %s", command, err)
-	}
-
 	return nil
 }

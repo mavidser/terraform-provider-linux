@@ -16,6 +16,12 @@ func Provider() *schema.Provider {
 				DefaultFunc: schema.EnvDefaultFunc("TF_LINUX_SSH_USER", ""),
 				Description: "The Docker daemon address",
 			},
+			"use_sudo": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("TF_LINUX_USE_SUDO", ""),
+				Description: "The Docker daemon address",
+			},
 			"host": {
 				Type:        schema.TypeString,
 				Required:    true,
@@ -50,12 +56,26 @@ func Provider() *schema.Provider {
 }
 
 func providerConfigure(d *schema.ResourceData) (interface{}, error) {
+	user := d.Get("user").(string)
+
+	var useSudoBool bool
+	useSudo, ok := d.GetOk("use_sudo")
+	if !ok {
+		if user == "root" {
+			useSudoBool = false
+		} else {
+			useSudoBool = true
+		}
+	} else {
+		useSudoBool = useSudo.(bool)
+	}
 	config := Config{
 		Host:       d.Get("host").(string),
 		Port:       d.Get("port").(int),
-		User:       d.Get("user").(string),
+		User:       user,
 		Password:   d.Get("password").(string),
 		PrivateKey: os.ExpandEnv(d.Get("private_key").(string)),
+		UseSudo:    useSudoBool,
 	}
 
 	log.Println("Initializing SSH client")
