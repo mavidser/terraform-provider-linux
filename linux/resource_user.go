@@ -188,7 +188,7 @@ func userResourceDelete(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
 	uid, err := strconv.Atoi(d.Id())
 	if err != nil {
-		errors.Wrap(err, "ID stored is not int")
+		return errors.Wrap(err, "ID stored is not int")
 	}
 	name, err := getUserName(client, uid)
 	if err != nil {
