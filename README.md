@@ -1,18 +1,51 @@
-# Terraform linux provider
+Terraform Linux Provider
+========================
 
-Just a basic provider to manage linux users/groups on a linux system.
-Doesn't support advanced user configuration options (only custom UIDs and GIDs for now).
+- Website: https://www.terraform.io
+- [![Gitter chat](https://badges.gitter.im/hashicorp-terraform/Lobby.png)](https://gitter.im/hashicorp-terraform/Lobby)
+- Mailing list: [Google Groups](http://groups.google.com/group/terraform-tool)
 
-TODO: Cleanup code, add tests, add more user configuration options
+<img src="https://cdn.rawgit.com/hashicorp/terraform-website/master/content/source/assets/images/logo-hashicorp.svg" width="600px">
 
-### Sample config
+Requirements
+------------
+
+-	[Terraform](https://www.terraform.io/downloads.html) 0.10.x
+-	[Go](https://golang.org/doc/install) 1.11 (to build the provider plugin)
+
+Usage
+---------------------
 
 ```
 provider "linux" {
   host = "192.168.1.2"
   user = "user"
 }
+```
 
+Building The Provider
+---------------------
+
+Clone repository to: `$GOPATH/src/github.com/mavidser/terraform-provider-linux`
+
+```sh
+$ mkdir -p $GOPATH/src/github.com/terraform-providers; cd $GOPATH/src/github.com/terraform-providers
+$ git clone git@github.com:mavidser/terraform-provider-linux
+```
+
+Enter the provider directory and build the provider
+
+```sh
+$ cd $GOPATH/src/github.com/mavidser/terraform-provider-linux
+$ make build
+```
+
+Using the provider
+----------------------
+
+Sample configuration for creating a few users/groups:
+
+```
 resource "linux_group" "testgroup" {
   name = "testgroup"
   system = false
@@ -20,33 +53,52 @@ resource "linux_group" "testgroup" {
 
 resource "linux_user" "testuser1" {
   name = "testuser1"
-  gid = "${linux_group.testgroup.gid}"
+  gid = linux_group.testgroup.gid
   system = false
 }
 
 resource "linux_user" "testuser2" {
   name = "testuser2"
-  gid = "${linux_group.testgroup.gid}"
+  gid = linux_group.testgroup.gid
   system = false
 }
 ```
 
-### Configuration options
+Developing the Provider
+---------------------------
 
-#### Provider
-- **user**
-- **host**
-- **port**
-- **password**
-- **private_key**
+If you wish to work on the provider, you'll first need [Go](http://www.golang.org) installed on your machine (version 1.11+ is *required*). You'll also need to correctly setup a [GOPATH](http://golang.org/doc/code.html#GOPATH), as well as adding `$GOPATH/bin` to your `$PATH`.
 
-#### Group resource
-- **name** - Required - int
-- **gid** - Optional - int
-- **system** - Optional - int
+To compile the provider, run `make build`. This will build the provider and put the provider binary in the `$GOPATH/bin` directory.
 
-#### User resource
-- **name** - Required - int
-- **uid** - Optional - int
-- **gid** - Optional - int
-- **system** - Optional - int
+```sh
+$ make build
+...
+$ $GOPATH/bin/terraform-provider-linux
+...
+```
+
+In order to test the provider, you can simply run `make test`.
+Note: These tests will require docker installed to spin up a container with ssh access.
+
+```sh
+$ make test
+```
+
+In order to run the full suite of Acceptance tests, run `make testacc`.
+
+```sh
+$ make testacc
+```
+
+In order to run only single Acceptance tests, execute the following steps:
+```sh
+# setup the testing environment
+$ source ./scripts/tests_setup.sh
+
+# run single tests
+TF_LOG=INFO TF_ACC=1 go test -v ./linux -run TestAccUserCreation -timeout 360s
+
+# cleanup the local testing resources
+$ source ./scripts/tests_cleanup.sh
+```
