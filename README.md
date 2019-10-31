@@ -1,4 +1,4 @@
-Terraform Linux Provider
+Terraform Linux Provider [![Build Status](https://travis-ci.org/mavidser/terraform-provider-linux.svg?branch=master)](https://travis-ci.org/mavidser/terraform-provider-linux)
 ========================
 
 - Website: https://www.terraform.io
@@ -16,7 +16,7 @@ Requirements
 Usage
 ---------------------
 
-```
+```terraform
 provider "linux" {
   host = "192.168.1.2"
   user = "user"
@@ -45,7 +45,7 @@ Using the provider
 
 Sample configuration for creating a few users/groups:
 
-```
+```terraform
 resource "linux_group" "testgroup" {
   name = "testgroup"
   system = false
@@ -92,6 +92,7 @@ $ make testacc
 ```
 
 In order to run only single Acceptance tests, execute the following steps:
+
 ```sh
 # setup the testing environment
 $ source ./scripts/tests_setup.sh
