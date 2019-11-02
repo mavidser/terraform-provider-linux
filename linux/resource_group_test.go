@@ -6,7 +6,6 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-	// "github.com/pkg/errors"
 )
 
 func TestAccGroupCreation(t *testing.T) {
@@ -15,7 +14,7 @@ func TestAccGroupCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccGroupConfig,
+				Config: groupConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_group.testgroup", "name", "testgroup"),
 					testAccCheckGID("testgroup", func(gid int) error { return nil }),
@@ -31,7 +30,7 @@ func TestAccSystemGroupCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccSystemGroupConfig,
+				Config: systemGroupConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_group.testgroup", "name", "testgroup"),
 					resource.TestCheckResourceAttr("linux_group.testgroup", "system", "true"),
@@ -53,7 +52,7 @@ func TestAccGroupWithGIDCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccGroupWithGIDConfig,
+				Config: groupWithGIDConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_group.testgroup", "name", "testgroup"),
 					resource.TestCheckResourceAttr("linux_group.testgroup", "gid", "1024"),
@@ -80,20 +79,64 @@ func testAccCheckGID(groupname string, check func(int) error) resource.TestCheck
 	}
 }
 
-const testAccGroupConfig = `
+func TestAccGroupUpdation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:  func() { testAccPreCheck(t) },
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: groupWithGIDConfig,
+			},
+			resource.TestStep{
+				Config: groupWithNameUpdatedConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("linux_group.testgroup", "name", "testgroup_alt"),
+					resource.TestCheckResourceAttr("linux_group.testgroup", "gid", "1024"),
+					testAccCheckGID("testgroup_alt", func(gid int) error {
+						if gid != 1024 {
+							return fmt.Errorf("GID should be 1024")
+						}
+						return nil
+					}),
+				),
+			},
+			resource.TestStep{
+				Config: groupWithNameGIDUpdatedConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("linux_group.testgroup", "name", "testgroup_alt"),
+					resource.TestCheckResourceAttr("linux_group.testgroup", "gid", "1025"),
+				),
+			},
+		},
+	})
+}
+
+const groupConfig = `
 resource "linux_group" "testgroup" {
 	name = "testgroup"
 }
 `
-const testAccSystemGroupConfig = `
+const systemGroupConfig = `
 resource "linux_group" "testgroup" {
 	name = "testgroup"
 	system = true
 }
 `
-const testAccGroupWithGIDConfig = `
+const groupWithGIDConfig = `
 resource "linux_group" "testgroup" {
 	name = "testgroup"
 	gid = 1024
+}
+`
+const groupWithNameUpdatedConfig = `
+resource "linux_group" "testgroup" {
+	name = "testgroup_alt"
+	gid = 1024
+}
+`
+const groupWithNameGIDUpdatedConfig = `
+resource "linux_group" "testgroup" {
+	name = "testgroup_alt"
+	gid = 1025
 }
 `

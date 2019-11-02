@@ -6,7 +6,6 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-	// "github.com/pkg/errors"
 )
 
 func TestAccUserCreation(t *testing.T) {
@@ -15,7 +14,7 @@ func TestAccUserCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccUserConfig,
+				Config: userConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser"),
 					testAccCheckUID("testuser", func(uid int) error { return nil }),
@@ -31,7 +30,7 @@ func TestAccSystemUserCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccSystemUserConfig,
+				Config: systemUserConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser"),
 					resource.TestCheckResourceAttr("linux_user.testuser", "system", "true"),
@@ -53,10 +52,11 @@ func TestAccUserWithUIDCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccUserWithUIDConfig,
+				Config: userWithUIDConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser"),
 					resource.TestCheckResourceAttr("linux_user.testuser", "uid", "1024"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "gid", "1024"),
 					testAccCheckUID("testuser", func(uid int) error {
 						if uid != 1024 {
 							return fmt.Errorf("UID should be 1024")
@@ -75,10 +75,9 @@ func TestAccUserWithGroupCreation(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccUserWithGroupConfig,
+				Config: userWithGroupConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser"),
-					resource.TestCheckResourceAttr("linux_user.testuser", "uid", "1024"),
 					resource.TestCheckResourceAttr("linux_user.testuser", "uid", "1024"),
 					resource.TestCheckResourceAttr("linux_user.testuser", "gid", "1048"),
 					testAccCheckUID("testuser", func(uid int) error {
@@ -99,6 +98,64 @@ func TestAccUserWithGroupCreation(t *testing.T) {
 						}
 						return nil
 					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserUpdation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:  func() { testAccPreCheck(t) },
+		Providers: testAccProviders,
+		CheckDestroy: func(*terraform.State) error {
+			client := testAccProvider.Meta().(*Client)
+			return deleteGroup(client, "testuser") // changing testuser's name leaves this group dangling
+		},
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: userWithUIDConfig,
+			},
+			resource.TestStep{
+				Config: userWithGroupConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "uid", "1024"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "gid", "1048"),
+					testAccCheckUID("testuser", func(uid int) error {
+						if uid != 1024 {
+							return fmt.Errorf("UID should be 1024")
+						}
+						return nil
+					}),
+					testAccCheckGID("testgroup", func(gid int) error {
+						if gid != 1048 {
+							return fmt.Errorf("GID should be 1048")
+						}
+						return nil
+					}),
+					testAccCheckGIDForUser("testuser", func(gid int) error {
+						if gid != 1048 {
+							return fmt.Errorf("GID should be 1048")
+						}
+						return nil
+					}),
+				),
+			},
+			resource.TestStep{
+				Config: userWithGroupNameUpdatedConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser_alt"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "uid", "1024"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "gid", "1048"),
+				),
+			},
+			resource.TestStep{
+				Config: userWithGroupNameUIDUpdatedConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("linux_user.testuser", "name", "testuser_alt"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "uid", "1025"),
+					resource.TestCheckResourceAttr("linux_user.testuser", "gid", "1048"),
 				),
 			},
 		},
@@ -127,24 +184,24 @@ func testAccCheckGIDForUser(username string, check func(int) error) resource.Tes
 	}
 }
 
-const testAccUserConfig = `
+const userConfig = `
 resource "linux_user" "testuser" {
 	name = "testuser"
 }
 `
-const testAccSystemUserConfig = `
+const systemUserConfig = `
 resource "linux_user" "testuser" {
 	name = "testuser"
 	system = true
 }
 `
-const testAccUserWithUIDConfig = `
+const userWithUIDConfig = `
 resource "linux_user" "testuser" {
 	name = "testuser"
 	uid = 1024
 }
 `
-const testAccUserWithGroupConfig = `
+const userWithGroupConfig = `
 resource "linux_group" "testgroup" {
 	name = "testgroup"
 	gid = 1048
@@ -152,6 +209,28 @@ resource "linux_group" "testgroup" {
 resource "linux_user" "testuser" {
 	name = "testuser"
 	uid = 1024
+	gid = linux_group.testgroup.gid
+}
+`
+const userWithGroupNameUpdatedConfig = `
+resource "linux_group" "testgroup" {
+	name = "testgroup"
+	gid = 1048
+}
+resource "linux_user" "testuser" {
+	name = "testuser_alt"
+	uid = 1024
+	gid = linux_group.testgroup.gid
+}
+`
+const userWithGroupNameUIDUpdatedConfig = `
+resource "linux_group" "testgroup" {
+	name = "testgroup"
+	gid = 1048
+}
+resource "linux_user" "testuser" {
+	name = "testuser_alt"
+	uid = 1025
 	gid = linux_group.testgroup.gid
 }
 `

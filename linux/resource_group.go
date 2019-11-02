@@ -144,6 +144,15 @@ func groupResourceUpdate(d *schema.ResourceData, m interface{}) error {
 	return groupResourceRead(d, m)
 }
 
+func deleteGroup(client *Client, name string) error {
+	command := fmt.Sprintf("/usr/sbin/groupdel %s", name)
+	_, _, err := runCommand(client, true, command, "")
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
+	}
+	return nil
+}
+
 func groupResourceDelete(d *schema.ResourceData, m interface{}) error {
 	client := m.(*Client)
 	gid, err := strconv.Atoi(d.Id())
@@ -155,10 +164,5 @@ func groupResourceDelete(d *schema.ResourceData, m interface{}) error {
 		return errors.Wrap(err, "Failed to get group name")
 	}
 
-	command := fmt.Sprintf("/usr/sbin/groupdel %s", name)
-	_, _, err = runCommand(client, true, command, "")
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
-	}
-	return nil
+	return deleteGroup(client, name)
 }
