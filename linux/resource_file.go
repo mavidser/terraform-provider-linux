@@ -114,7 +114,6 @@ func fileResourceCreateWrapper(isFolder bool) func(*schema.ResourceData, interfa
 		path := d.Get("path").(string)
 		owner := d.Get("owner").(string)
 		permissions := d.Get("permissions").(int)
-		content := d.Get("content").(string)
 
 		if err := createFile(client, path, isFolder); err != nil {
 			return errors.Wrap(err, "Couldn't create file")
@@ -132,9 +131,12 @@ func fileResourceCreateWrapper(isFolder bool) func(*schema.ResourceData, interfa
 			}
 		}
 
-		if !isFolder && content != "" {
-			if err := writeContent(client, path, content); err != nil {
-				return rollback(client, err, "Couldn't write content, rolling back file creation", path)
+		if !isFolder {
+			content := d.Get("content").(string)
+			if content != "" {
+				if err := writeContent(client, path, content); err != nil {
+					return rollback(client, err, "Couldn't write content, rolling back file creation", path)
+				}
 			}
 		}
 
@@ -144,7 +146,7 @@ func fileResourceCreateWrapper(isFolder bool) func(*schema.ResourceData, interfa
 }
 
 func getDetails(client *Client, path string) (string, int, error) {
-	command := fmt.Sprintf("ls -l %s", path)
+	command := fmt.Sprintf("ls -ld %s", path)
 	stdout, _, err := runCommand(client, false, command, "")
 	if err != nil {
 		return "", 0, errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
@@ -213,7 +215,6 @@ func fileResourceUpdateWrapper(isFolder bool) func(*schema.ResourceData, interfa
 		path := d.Get("path").(string)
 		owner := d.Get("owner").(string)
 		permissions := d.Get("permissions").(int)
-		content := d.Get("content").(string)
 
 		oldPath := d.Id()
 		oldOwner, oldPermissions, err := getDetails(client, oldPath)
@@ -222,6 +223,7 @@ func fileResourceUpdateWrapper(isFolder bool) func(*schema.ResourceData, interfa
 		}
 
 		if !isFolder {
+			content := d.Get("content").(string)
 			oldContent, err := readFile(client, oldPath)
 			if err != nil {
 				return errors.Wrap(err, "Unable to read the file")

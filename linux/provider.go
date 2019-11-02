@@ -48,9 +48,10 @@ func Provider() *schema.Provider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"linux_group": groupResource(),
-			"linux_user":  userResource(),
-			"linux_file":  fileResource(),
+			"linux_group":  groupResource(),
+			"linux_user":   userResource(),
+			"linux_file":   fileResource(),
+			"linux_folder": folderResource(),
 		},
 		ConfigureFunc: providerConfigure,
 	}
