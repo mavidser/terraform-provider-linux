@@ -58,7 +58,7 @@ func createFile(client *Client, path string, isFolder bool) error {
 
 func applyOwner(client *Client, path string, owner string) error {
 	command := fmt.Sprintf("chown %s %s", owner, path)
-	_, _, err := runCommand(client, false, command, "")
+	_, _, err := runCommand(client, true, command, "")
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}
@@ -67,7 +67,7 @@ func applyOwner(client *Client, path string, owner string) error {
 
 func applyPermissions(client *Client, path string, permissions int) error {
 	command := fmt.Sprintf("chmod %d %s", permissions, path)
-	_, _, err := runCommand(client, false, command, "")
+	_, _, err := runCommand(client, true, command, "")
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Command failed: %s", command))
 	}

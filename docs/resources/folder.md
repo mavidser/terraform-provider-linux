@@ -4,6 +4,8 @@ Manages folders and their attributes.
 
 -> Make sure that the user has permissions to the folders being created.
 
+-> If using the provider with a non-sudoer user, allow NOPASSWD sudo access to these commands - `chown` and `chmod`.
+
 ## Example Usage
 
 ```hcl
