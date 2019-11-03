@@ -1,7 +1,10 @@
 Terraform Linux Provider [![Build Status](https://travis-ci.org/mavidser/terraform-provider-linux.svg?branch=master)](https://travis-ci.org/mavidser/terraform-provider-linux)
 ========================
 
+*I realize that the name 'Linux Provider' is misleading, but I needed this provider and couldn't find a more suitable name.*
+
 - [Documentation](https://github.com/mavidser/terraform-provider-linux/tree/master/docs)
+
 
 <img src="https://cdn.rawgit.com/hashicorp/terraform-website/master/content/source/assets/images/logo-hashicorp.svg" width="600px">
 
