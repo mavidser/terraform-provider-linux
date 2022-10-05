@@ -16,7 +16,6 @@ resource "linux_user" "testuser" {
 
 resource "linux_folder" "testfolder" {
   path = "/etc/testfolder"
-  content = "testcontent"
   owner = "${linux_user.testuser.name}:${linux_user.testuser.name}"
   permissions = 777
 }
